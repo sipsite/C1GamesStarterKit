@@ -1,0 +1,46 @@
+
+pre-requisite work: 
+
+a function f1: roughly estimate the attack for an entity along the way, relative number is ok (use find_path_to_edge(), get_attackers())
+
+
+round<=3: 
+do nothing
+
+round>3:
+
+every round: 
+
+m2:=enime's mobile point
+m1:=my mobile point
+h2:= enime health
+
+a) do nothing
+
+b) see (by f1) the attack recieved by entities sent from (11,2), (16,2), to be u1, u2, respectively. let u be min betwen u1, u2, and if we attack, use the corresponding location.
+
+ps. "cc+sth": constants to be decided
+
+probability of sending anything in b): { W1(m1 - u * cc1, 13) }
+
+b.i) if h2*1.1< m1 and u < cc2 : prob of sending SC =W1(m1 - cc1 * u, h2); if do not attack, see next choice
+b.ii) elif m1>15: prob of attacking = W1(m1 - u * cc1, 10 + sqrt(num of round))
+- when attack, use all points at one type of entity:  prob of sending D=W1 (u * cc3, 1); send SC otherwise.
+
+
+
+
+
+appendix: $W1(x, x0):=\frac{\tanh\left(\frac{2x}{x_{0}}-1\right)}{2}+0.5$: 
+- approx 0 when x<0
+- approx linear when x in 0~x0
+- approx 1 when x>x0
+
+
+
+
+
+
+
+
+
