@@ -19,12 +19,14 @@ Advanced strategy tips:
   the actual current map state.
 """
 
-import random
-
 # constants
 c1 = 2 # start building at c1 round
 c2 = 0.4 # proportion of support among "turrent and support"
-c3 = 0.1 # upgrade 100*c3% of buildings
+c3 = 0.3 # upgrade cost adds up to proportion c3
+cc1 = 0.6
+cc2 = 8.0
+cc3 = 0.2
+
 
 PRIORITY_1_TURRETS = [
     [8, 9], [19, 9],
@@ -97,6 +99,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         # self.starter_strategy(game_state)
 
         self.build_image_layout(game_state)
+        self.execute_military_strategy(game_state)
 
         game_state.submit_turn()
 
@@ -121,6 +124,47 @@ class AlgoStrategy(gamelib.AlgoCore):
         if not self.spawn_random_mix(game_state, PRIORITY_5_SUPPORTS, PRIORITY_5_TURRETS):
             return
         self.spawn_in_order(game_state, TURRET, PRIORITY_6_TURRETS)
+
+    def execute_military_strategy(self, game_state):
+        if game_state.turn_number <= 3:
+            game_state.attempt_spawn(INTERCEPTOR, [7, 6], 2)
+            game_state.attempt_spawn(INTERCEPTOR, [20, 6], 3)
+            return
+
+        enemy_mp = game_state.get_resource(MP, 1)
+        my_mp = game_state.get_resource(MP)
+        enemy_health = game_state.enemy_health
+
+        interceptor_count = int(enemy_mp // 10)
+        if interceptor_count > 0:
+            game_state.attempt_spawn(INTERCEPTOR, [19, 5], interceptor_count)
+
+        best_location, best_attack = self.choose_attack_path(game_state, [[11, 2], [16, 2]])
+        attack_probability = self.w1(my_mp - best_attack * cc1, 13)
+        if random.random() >= attack_probability:
+            return
+
+        if enemy_health * 1.1 < my_mp and best_attack < cc2:
+            scout_probability = self.w1(1 - cc1 * best_attack, enemy_health / max(my_mp, 0.1))
+            if random.random() < scout_probability:
+                self.send_all_of_type(game_state, SCOUT, best_location)
+                return
+
+        if my_mp <= 15:
+            return
+
+        fallback_attack_probability = self.w1(
+            my_mp - best_attack * cc1,
+            10 + math.sqrt(max(game_state.turn_number, 1)),
+        )
+        if random.random() >= fallback_attack_probability:
+            return
+
+        demolisher_probability = self.w1(best_attack * cc3, 1)
+        if random.random() < demolisher_probability:
+            self.send_all_of_type(game_state, DEMOLISHER, best_location)
+        else:
+            self.send_all_of_type(game_state, SCOUT, best_location)
 
     def spawn_in_order(self, game_state, unit_type, locations):
         for location in locations:
@@ -165,6 +209,37 @@ class AlgoStrategy(gamelib.AlgoCore):
             location for location in locations
             if not game_state.contains_stationary_unit(location)
         ]
+
+    def choose_attack_path(self, game_state, locations):
+        best_location = locations[0]
+        best_attack = self.estimate_path_attack(game_state, best_location)
+        for location in locations[1:]:
+            attack = self.estimate_path_attack(game_state, location)
+            if attack < best_attack:
+                best_location = location
+                best_attack = attack
+        return best_location, best_attack
+
+    def estimate_path_attack(self, game_state, location):
+        path = game_state.find_path_to_edge(location)
+        if not path:
+            return float("inf")
+
+        pressure = 0
+        for path_location in path:
+            attackers = game_state.get_attackers(path_location, 0)
+            pressure += len(attackers)
+        return pressure
+
+    def w1(self, x, x0):
+        x0 = max(float(x0), 0.1)
+        return math.tanh((2 * x / x0) - 1) / 2 + 0.5
+
+    def send_all_of_type(self, game_state, unit_type, location):
+        affordable = game_state.number_affordable(unit_type)
+        if affordable <= 0:
+            return 0
+        return game_state.attempt_spawn(unit_type, location, affordable)
 
     def starter_strategy(self, game_state):
         """

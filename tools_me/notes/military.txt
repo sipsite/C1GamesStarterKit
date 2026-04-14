@@ -17,7 +17,7 @@ h2:= enime health
 
 a) send (m2 // 10) I's at (19,5)
 
-b) see (by f1) the attack recieved by entities sent from (11,2), (16,2), to be u1, u2, respectively. let u be min betwen u1, u2, and if we attack, use that way.
+b) see (by f1) the attack recieved by entities sent from (11,2), (16,2), to be u1, u2, respectively. let u be min betwen u1, u2, and if we attack, use the corresponding location.
 
 ps. "cc+sth": constants to be decided
 

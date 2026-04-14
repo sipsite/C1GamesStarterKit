@@ -1,4 +1,7 @@
 
+only after "building - priority 6" is complete(and fixed if needed) do we do upgrade, and each round we use c3 of points for upgrading, other for building
+
+# building: 
 
 priority 1: (W,S,T means buildings)
 
@@ -20,6 +23,8 @@ priority 4:
 priority 5: 
 （接下来这几行的TS，交错搭建）
 
+(8,10), (13,9) T 
+
 (21,10),(22,11),(19,8),(18,9),(21,11),(21,12),(17,10) T
 (14,3),(13,3),(12,3),(12,4),(13,4),(14,4) S 
 
@@ -29,3 +34,20 @@ priority 6:
 
 (2,13),(3,13),(2,12) T
 (24,13),(23,13) T
+
+priority 7:
+
+blank
+
+---
+# upgrading: 
+
+
+
+my structure point:=p1
+num of my W, T, S'=: these letters 
+
+升级的优先级如下：(ps W1 is a function written)
+1. W: (0,13),(1,12),(27,13),(26,13) 
+2. T: (2,13),(3,13),(23,13),(24,13)
+3. other T and S (with priority same as building)
