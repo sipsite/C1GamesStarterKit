@@ -27,3 +27,7 @@ cd D:\Desktop\26.2\misc\4.14_terminal\tools_me\map_to_location
 npm run build
 npm run preview
 ```
+
+# misc: 
+
+看replay的网站：https://terminal.c1games.com/playground

@@ -2,6 +2,7 @@ import gamelib
 import random
 import math
 import warnings
+import os
 from sys import maxsize
 import json
 
@@ -22,10 +23,10 @@ Advanced strategy tips:
 # constants
 c1 = 2 # start building at c1 round
 c2 = 0.4 # proportion of support among "turrent and support"
-c3 = 0.3 # upgrade cost adds up to proportion c3
-cc1 = 0.6
-cc2 = 8.0
-cc3 = 0.2
+c3 = 1 # upgrade cost adds up to proportion c3
+cc1 = 0.4
+cc2 = 30
+cc3 = 0.1
 
 
 PRIORITY_1_TURRETS = [
@@ -45,6 +46,10 @@ PRIORITY_4_WALLS = [
     [6, 7], [7, 6], [8, 5], [9, 4], [10, 3], [11, 2], [12, 2], [13, 2],
 ]
 
+PRIORITY_5_FIXED_TURRETS = [
+    [8, 10], [13, 9],
+]
+
 PRIORITY_5_TURRETS = [
     [21, 10], [22, 11], [19, 8], [18, 9], [21, 11], [21, 12], [17, 10],
 ]
@@ -57,12 +62,26 @@ PRIORITY_6_TURRETS = [
     [2, 13], [3, 13], [2, 12], [24, 13], [23, 13],
 ]
 
+UPGRADE_PRIORITY_1_WALLS = [
+    [0, 13], [1, 12], [27, 13], [26, 13],
+]
+
+UPGRADE_PRIORITY_2_TURRETS = [
+    [2, 13], [3, 13], [23, 13], [24, 13],
+]
+
+UPGRADE_PRIORITY_3_TURRETS = [
+    [8, 9], [19, 9],
+    [8, 10], [13, 9],
+]
+
 class AlgoStrategy(gamelib.AlgoCore):
     def __init__(self):
         super().__init__()
         seed = random.randrange(maxsize)
         random.seed(seed)
         gamelib.debug_write('Random seed: {}'.format(seed))
+        self.log_path = os.path.join(os.path.dirname(__file__), "f1_debug.log")
 
     def on_game_start(self, config):
         """ 
@@ -81,6 +100,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         SP = 0
         # This is a good place to do initial setup
         self.scored_on_locations = []
+        with open(self.log_path, "w", encoding="utf-8") as log_file:
+            log_file.write("f1 debug log\n")
 
     def on_turn(self, turn_state):
         """
@@ -113,19 +134,31 @@ class AlgoStrategy(gamelib.AlgoCore):
         if game_state.turn_number < c1:
             return
 
-        if not self.spawn_in_order(game_state, TURRET, PRIORITY_1_TURRETS):
-            return
-        if not self.spawn_in_order(game_state, WALL, PRIORITY_2_WALLS):
-            return
-        if not self.spawn_in_order(game_state, WALL, PRIORITY_3_WALLS):
-            return
-        if not self.spawn_in_order(game_state, WALL, PRIORITY_4_WALLS):
-            return
-        if not self.spawn_random_mix(game_state, PRIORITY_5_SUPPORTS, PRIORITY_5_TURRETS):
-            return
-        self.spawn_in_order(game_state, TURRET, PRIORITY_6_TURRETS)
+        total_sp = game_state.get_resource(SP)
+        layout_was_complete = self.is_building_complete(game_state)
+        building_budget = total_sp if not layout_was_complete else total_sp * (1 - c3)
+
+        self.run_build_priorities(game_state, building_budget)
+
+        if self.is_building_complete(game_state):
+            upgrade_budget = min(total_sp * c3, game_state.get_resource(SP))
+            self.run_upgrade_priorities(game_state, upgrade_budget)
 
     def execute_military_strategy(self, game_state):
+        u1 = self.f1(game_state, [12, 1])
+        u2 = self.f1(game_state, [16, 2])
+        best_location = [12, 1] if u1 <= u2 else [16, 2]
+        best_attack = min(u1, u2)
+        self.log_line(
+            "f1, turn={}, u1(12,1)={}, u2(16,2)={}, chosen={}, u={}".format(
+                game_state.turn_number,
+                u1,
+                u2,
+                best_location,
+                best_attack,
+            )
+        )
+
         if game_state.turn_number <= 3:
             game_state.attempt_spawn(INTERCEPTOR, [7, 6], 2)
             game_state.attempt_spawn(INTERCEPTOR, [20, 6], 3)
@@ -139,13 +172,12 @@ class AlgoStrategy(gamelib.AlgoCore):
         if interceptor_count > 0:
             game_state.attempt_spawn(INTERCEPTOR, [19, 5], interceptor_count)
 
-        best_location, best_attack = self.choose_attack_path(game_state, [[11, 2], [16, 2]])
         attack_probability = self.w1(my_mp - best_attack * cc1, 13)
         if random.random() >= attack_probability:
             return
 
         if enemy_health * 1.1 < my_mp and best_attack < cc2:
-            scout_probability = self.w1(1 - cc1 * best_attack, enemy_health / max(my_mp, 0.1))
+            scout_probability = self.w1(my_mp - cc1 * best_attack, enemy_health)
             if random.random() < scout_probability:
                 self.send_all_of_type(game_state, SCOUT, best_location)
                 return
@@ -210,15 +242,189 @@ class AlgoStrategy(gamelib.AlgoCore):
             if not game_state.contains_stationary_unit(location)
         ]
 
+    def run_build_priorities(self, game_state, budget):
+        budget_state = self.make_budget_state(game_state, budget)
+        self.spawn_in_order_with_budget(game_state, TURRET, PRIORITY_1_TURRETS, budget_state)
+        self.spawn_in_order_with_budget(game_state, WALL, PRIORITY_2_WALLS, budget_state)
+        self.spawn_in_order_with_budget(game_state, WALL, PRIORITY_3_WALLS, budget_state)
+        self.spawn_in_order_with_budget(game_state, WALL, PRIORITY_4_WALLS, budget_state)
+        self.spawn_in_order_with_budget(game_state, TURRET, PRIORITY_5_FIXED_TURRETS, budget_state)
+        self.spawn_random_mix_with_budget(
+            game_state,
+            PRIORITY_5_SUPPORTS,
+            PRIORITY_5_TURRETS,
+            budget_state,
+        )
+        self.spawn_in_order_with_budget(game_state, TURRET, PRIORITY_6_TURRETS, budget_state)
+
+    def run_upgrade_priorities(self, game_state, budget):
+        budget_state = self.make_budget_state(game_state, budget)
+        self.upgrade_in_order_with_budget(game_state, UPGRADE_PRIORITY_1_WALLS, budget_state)
+        self.upgrade_in_order_with_budget(game_state, UPGRADE_PRIORITY_2_TURRETS, budget_state)
+        self.upgrade_in_order_with_budget(game_state, UPGRADE_PRIORITY_3_TURRETS, budget_state)
+        self.upgrade_random_mix_with_budget(
+            game_state,
+            PRIORITY_5_SUPPORTS,
+            PRIORITY_5_TURRETS,
+            budget_state,
+        )
+        self.upgrade_in_order_with_budget(game_state, PRIORITY_6_TURRETS, budget_state)
+
+    def is_building_complete(self, game_state):
+        return (
+            self.locations_match_type(game_state, WALL, PRIORITY_2_WALLS)
+            and self.locations_match_type(game_state, WALL, PRIORITY_3_WALLS)
+            and self.locations_match_type(game_state, WALL, PRIORITY_4_WALLS)
+            and self.locations_match_type(game_state, TURRET, PRIORITY_1_TURRETS)
+            and self.locations_match_type(game_state, TURRET, PRIORITY_5_FIXED_TURRETS)
+            and self.locations_match_type(game_state, TURRET, PRIORITY_5_TURRETS)
+            and self.locations_match_type(game_state, SUPPORT, PRIORITY_5_SUPPORTS)
+            and self.locations_match_type(game_state, TURRET, PRIORITY_6_TURRETS)
+        )
+
+    def locations_match_type(self, game_state, unit_type, locations):
+        for location in locations:
+            structure = self.get_structure_at(game_state, location)
+            if structure is None or structure.unit_type != unit_type:
+                return False
+        return True
+
+    def get_structure_at(self, game_state, location):
+        structure = game_state.contains_stationary_unit(location)
+        return structure if structure else None
+
+    def make_budget_state(self, game_state, budget):
+        return {
+            "start_sp": game_state.get_resource(SP),
+            "budget": max(float(budget), 0.0),
+        }
+
+    def spent_budget(self, game_state, budget_state):
+        return budget_state["start_sp"] - game_state.get_resource(SP)
+
+    def can_spend_sp(self, game_state, budget_state, cost):
+        return self.spent_budget(game_state, budget_state) + cost <= budget_state["budget"] + 1e-9
+
+    def spawn_in_order_with_budget(self, game_state, unit_type, locations, budget_state):
+        for location in locations:
+            structure = self.get_structure_at(game_state, location)
+            if structure is not None:
+                continue
+            cost = game_state.type_cost(unit_type)[SP]
+            if not self.can_spend_sp(game_state, budget_state, cost):
+                return False
+            if game_state.attempt_spawn(unit_type, location) == 0:
+                return False
+        return True
+
+    def spawn_random_mix_with_budget(self, game_state, support_locations, turret_locations, budget_state):
+        while True:
+            remaining_supports = self.get_remaining_type_locations(game_state, SUPPORT, support_locations)
+            remaining_turrets = self.get_remaining_type_locations(game_state, TURRET, turret_locations)
+
+            if not remaining_supports and not remaining_turrets:
+                return True
+
+            build_support = random.random() < c2
+            if build_support:
+                if self.spawn_next_with_budget(game_state, SUPPORT, remaining_supports, budget_state):
+                    continue
+                if self.spawn_next_with_budget(game_state, TURRET, remaining_turrets, budget_state):
+                    continue
+            else:
+                if self.spawn_next_with_budget(game_state, TURRET, remaining_turrets, budget_state):
+                    continue
+                if self.spawn_next_with_budget(game_state, SUPPORT, remaining_supports, budget_state):
+                    continue
+
+            return False
+
+    def spawn_next_with_budget(self, game_state, unit_type, locations, budget_state):
+        cost = game_state.type_cost(unit_type)[SP]
+        if not self.can_spend_sp(game_state, budget_state, cost):
+            return False
+        for location in locations:
+            spawned = game_state.attempt_spawn(unit_type, location)
+            if spawned > 0:
+                return True
+        return False
+
+    def get_remaining_type_locations(self, game_state, unit_type, locations):
+        remaining = []
+        for location in locations:
+            structure = self.get_structure_at(game_state, location)
+            if structure is None:
+                remaining.append(location)
+            elif structure.unit_type != unit_type:
+                remaining.append(location)
+        return remaining
+
+    def upgrade_in_order_with_budget(self, game_state, locations, budget_state):
+        for location in locations:
+            structure = self.get_structure_at(game_state, location)
+            if structure is None or structure.upgraded:
+                continue
+            cost = game_state.type_cost(structure.unit_type, True)[SP]
+            if not self.can_spend_sp(game_state, budget_state, cost):
+                return False
+            if game_state.attempt_upgrade(location) == 0:
+                return False
+        return True
+
+    def upgrade_random_mix_with_budget(self, game_state, support_locations, turret_locations, budget_state):
+        while True:
+            remaining_supports = self.get_unupgraded_locations(game_state, support_locations)
+            remaining_turrets = self.get_unupgraded_locations(game_state, turret_locations)
+
+            if not remaining_supports and not remaining_turrets:
+                return True
+
+            build_support = random.random() < c2
+            if build_support:
+                if self.upgrade_next_with_budget(game_state, remaining_supports, budget_state):
+                    continue
+                if self.upgrade_next_with_budget(game_state, remaining_turrets, budget_state):
+                    continue
+            else:
+                if self.upgrade_next_with_budget(game_state, remaining_turrets, budget_state):
+                    continue
+                if self.upgrade_next_with_budget(game_state, remaining_supports, budget_state):
+                    continue
+
+            return False
+
+    def get_unupgraded_locations(self, game_state, locations):
+        remaining = []
+        for location in locations:
+            structure = self.get_structure_at(game_state, location)
+            if structure is not None and not structure.upgraded:
+                remaining.append(location)
+        return remaining
+
+    def upgrade_next_with_budget(self, game_state, locations, budget_state):
+        for location in locations:
+            structure = self.get_structure_at(game_state, location)
+            if structure is None or structure.upgraded:
+                continue
+            cost = game_state.type_cost(structure.unit_type, True)[SP]
+            if not self.can_spend_sp(game_state, budget_state, cost):
+                return False
+            if game_state.attempt_upgrade(location) > 0:
+                return True
+        return False
+
     def choose_attack_path(self, game_state, locations):
         best_location = locations[0]
-        best_attack = self.estimate_path_attack(game_state, best_location)
+        best_attack = self.f1(game_state, best_location)
         for location in locations[1:]:
-            attack = self.estimate_path_attack(game_state, location)
+            attack = self.f1(game_state, location)
             if attack < best_attack:
                 best_location = location
                 best_attack = attack
         return best_location, best_attack
+
+    def f1(self, game_state, location):
+        return self.estimate_path_attack(game_state, location)
 
     def estimate_path_attack(self, game_state, location):
         path = game_state.find_path_to_edge(location)
@@ -240,6 +446,10 @@ class AlgoStrategy(gamelib.AlgoCore):
         if affordable <= 0:
             return 0
         return game_state.attempt_spawn(unit_type, location, affordable)
+
+    def log_line(self, message):
+        with open(self.log_path, "a", encoding="utf-8") as log_file:
+            log_file.write(message + "\n")
 
     def starter_strategy(self, game_state):
         """

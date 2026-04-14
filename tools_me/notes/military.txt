@@ -23,7 +23,7 @@ ps. "cc+sth": constants to be decided
 
 probability of sending anything in b): { W1(m1 - u * cc1, 13) }
 
-b.i) if h2*1.1< m1 and u < cc2 : prob of sending SC =W1(1 - cc1 * u, h2/m1); if do not attack, see next choice
+b.i) if h2*1.1< m1 and u < cc2 : prob of sending SC =W1(m1 - cc1 * u, h2); if do not attack, see next choice
 b.ii) elif m1>15: prob of attacking = W1(m1 - u * cc1, 10 + sqrt(num of round))
 - when attack, use all points at one type of entity:  prob of sending D=W1 (u * cc3, 1); send SC otherwise.
 
