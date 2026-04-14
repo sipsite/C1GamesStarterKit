@@ -1,0 +1,252 @@
+:root {
+  color-scheme: light;
+  font-family: Inter, 'Segoe UI', sans-serif;
+  color: #10233f;
+  background: #edf4ff;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background:
+    radial-gradient(circle at top left, rgba(89, 156, 255, 0.18), transparent 28%),
+    linear-gradient(180deg, #f8fbff 0%, #edf4ff 100%);
+}
+
+button,
+textarea {
+  font: inherit;
+}
+
+button {
+  border: 1px solid #c7d7f0;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #143866;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+button:hover {
+  transform: translateY(-1px);
+  border-color: #88acf0;
+  box-shadow: 0 10px 20px rgba(44, 89, 160, 0.12);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+button:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(79, 131, 234, 0.25);
+  outline-offset: 2px;
+}
+
+code {
+  padding: 2px 6px;
+  border-radius: 8px;
+  background: #eef4ff;
+  color: #1e4f95;
+}
+
+#app {
+  min-height: 100vh;
+  padding: 28px;
+}
+
+.layout {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(320px, 0.9fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.panel {
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(176, 199, 235, 0.95);
+  border-radius: 24px;
+  box-shadow: 0 24px 48px rgba(45, 87, 150, 0.1);
+}
+
+.map-panel {
+  padding: 24px;
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #5b7ba6;
+}
+
+h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.1;
+}
+
+.panel-copy {
+  margin: 0 0 18px;
+  color: #456287;
+  line-height: 1.7;
+}
+
+.map-shell {
+  overflow: auto;
+  border-radius: 20px;
+  border: 1px solid #d6e3f7;
+  background:
+    linear-gradient(180deg, rgba(238, 245, 255, 0.8), rgba(244, 248, 255, 0.98));
+  padding: 14px;
+}
+
+.map-svg {
+  width: 100%;
+  min-width: 760px;
+  height: auto;
+  display: block;
+}
+
+.map-shape {
+  fill: rgba(124, 172, 255, 0.15);
+  stroke: #3d6ec7;
+  stroke-width: 3;
+}
+
+.axis-labels text {
+  fill: #355580;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.point-hit {
+  fill: transparent;
+  cursor: pointer;
+}
+
+.point-dot {
+  fill: #7f96bc;
+  transition:
+    fill 0.18s ease,
+    transform 0.18s ease,
+    r 0.18s ease;
+  transform-box: fill-box;
+  transform-origin: center;
+  pointer-events: none;
+}
+
+.map-point:hover .point-dot {
+  fill: #3b6fd4;
+}
+
+.map-point.selected .point-dot {
+  fill: #ea5b60;
+  transform: scale(1.18);
+}
+
+.side-panel {
+  padding: 20px;
+  display: grid;
+  gap: 18px;
+}
+
+.io-block {
+  display: grid;
+  gap: 10px;
+}
+
+.io-block label {
+  font-size: 15px;
+  font-weight: 700;
+  color: #23497d;
+}
+
+textarea {
+  min-height: 170px;
+  resize: vertical;
+  border: 1px solid #c8d8ef;
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: #fbfdff;
+  color: #16375e;
+  line-height: 1.6;
+}
+
+#outputBox {
+  min-height: 220px;
+  background: #f3f8ff;
+}
+
+.button-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.feedback {
+  margin: 0;
+  min-height: 24px;
+  color: #547197;
+}
+
+.feedback[data-type='success'] {
+  color: #1e7a4e;
+}
+
+.feedback[data-type='error'] {
+  color: #be3f55;
+}
+
+@media (max-width: 1080px) {
+  #app {
+    padding: 16px;
+  }
+
+  .layout {
+    grid-template-columns: 1fr;
+  }
+
+  .map-svg {
+    min-width: 680px;
+  }
+}
+
+@media (max-width: 640px) {
+  .map-panel,
+  .side-panel {
+    padding: 16px;
+  }
+
+  .panel-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .button-row {
+    flex-direction: column;
+  }
+}

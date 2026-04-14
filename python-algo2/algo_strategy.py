@@ -19,6 +19,42 @@ Advanced strategy tips:
   the actual current map state.
 """
 
+import random
+
+# constants
+c1 = 2 # start building at c1 round
+c2 = 0.4 # proportion of support among "turrent and support"
+c3 = 0.1 # upgrade 100*c3% of buildings
+
+PRIORITY_1_TURRETS = [
+    [8, 9], [19, 9],
+]
+
+PRIORITY_2_WALLS = [
+    [0, 13], [1, 12], [2, 11], [3, 10], [4, 9], [5, 8], [27, 13], [26, 13],
+]
+
+PRIORITY_3_WALLS = [
+    [14, 2], [15, 3], [16, 4], [17, 5], [18, 6], [19, 7],
+    [20, 8], [22, 10], [23, 11], [24, 12], [25, 13],
+]
+
+PRIORITY_4_WALLS = [
+    [6, 7], [7, 6], [8, 5], [9, 4], [10, 3], [11, 2], [12, 2], [13, 2],
+]
+
+PRIORITY_5_TURRETS = [
+    [21, 10], [22, 11], [19, 8], [18, 9], [21, 11], [21, 12], [17, 10],
+]
+
+PRIORITY_5_SUPPORTS = [
+    [14, 3], [13, 3], [12, 3], [12, 4], [13, 4], [14, 4],
+]
+
+PRIORITY_6_TURRETS = [
+    [2, 13], [3, 13], [2, 12], [24, 13], [23, 13],
+]
+
 class AlgoStrategy(gamelib.AlgoCore):
     def __init__(self):
         super().__init__()
@@ -56,7 +92,11 @@ class AlgoStrategy(gamelib.AlgoCore):
         gamelib.debug_write('Performing turn {} of your custom algo strategy'.format(game_state.turn_number))
         game_state.suppress_warnings(True)  #Comment or remove this line to enable warnings.
 
-        self.starter_strategy(game_state)
+        # Old starter algo behavior kept as comments for reference only.
+        # game_state.attempt_spawn(DEMOLISHER, [24, 10], 3)
+        # self.starter_strategy(game_state)
+
+        self.build_image_layout(game_state)
 
         game_state.submit_turn()
 
@@ -65,6 +105,66 @@ class AlgoStrategy(gamelib.AlgoCore):
     NOTE: All the methods after this point are part of the sample starter-algo
     strategy and can safely be replaced for your custom algo.
     """
+
+    def build_image_layout(self, game_state):
+        if game_state.turn_number < c1:
+            return
+
+        if not self.spawn_in_order(game_state, TURRET, PRIORITY_1_TURRETS):
+            return
+        if not self.spawn_in_order(game_state, WALL, PRIORITY_2_WALLS):
+            return
+        if not self.spawn_in_order(game_state, WALL, PRIORITY_3_WALLS):
+            return
+        if not self.spawn_in_order(game_state, WALL, PRIORITY_4_WALLS):
+            return
+        if not self.spawn_random_mix(game_state, PRIORITY_5_SUPPORTS, PRIORITY_5_TURRETS):
+            return
+        self.spawn_in_order(game_state, TURRET, PRIORITY_6_TURRETS)
+
+    def spawn_in_order(self, game_state, unit_type, locations):
+        for location in locations:
+            if game_state.contains_stationary_unit(location):
+                continue
+            spawned = game_state.attempt_spawn(unit_type, location)
+            if spawned == 0:
+                return False
+        return True
+
+    def spawn_random_mix(self, game_state, support_locations, turret_locations):
+        while True:
+            remaining_supports = self.get_remaining_locations(game_state, support_locations)
+            remaining_turrets = self.get_remaining_locations(game_state, turret_locations)
+
+            if not remaining_supports and not remaining_turrets:
+                return True
+
+            build_support = random.random() < c2
+            if build_support:
+                if self.spawn_next(game_state, SUPPORT, remaining_supports):
+                    continue
+                if self.spawn_next(game_state, TURRET, remaining_turrets):
+                    continue
+            else:
+                if self.spawn_next(game_state, TURRET, remaining_turrets):
+                    continue
+                if self.spawn_next(game_state, SUPPORT, remaining_supports):
+                    continue
+
+            return False
+
+    def spawn_next(self, game_state, unit_type, locations):
+        for location in locations:
+            spawned = game_state.attempt_spawn(unit_type, location)
+            if spawned > 0:
+                return True
+        return False
+
+    def get_remaining_locations(self, game_state, locations):
+        return [
+            location for location in locations
+            if not game_state.contains_stationary_unit(location)
+        ]
 
     def starter_strategy(self, game_state):
         """
