@@ -9,9 +9,8 @@ TURRET_LOCATIONS = [
     [8, 9], [8, 8], [19, 9], [19, 8],
 ]
 
-# 可直接在这里调概率，要求 c1 + c2 <= 1。
-c1 = 0.30
-c2 = 0.30
+c1 = 0.1 # prob of building T
+c2 = 0.3 # prob of upgrading S; c1+c2<=1
 
 # 手动列出位于 x + y >= 15 且 x - y <= 12 的己方半场 support 点，
 # 并按 y 从小到大优先建造。
@@ -62,13 +61,38 @@ class AlgoStrategy(gamelib.AlgoCore):
             self.build_supports(game_state, only_first_three_rows=True)
             return
 
-        roll = random.random()
-        if roll < c1:
-            self.build_turrets(game_state)
-        elif roll < c1 + c2:
-            self.upgrade_supports(game_state)
-        else:
-            self.build_supports(game_state)
+        while self.has_any_post_core_action(game_state):
+            self.run_one_random_action(game_state)
+
+    def has_any_post_core_action(self, game_state):
+        return (
+            self.can_build_one_turret(game_state)
+            or self.can_upgrade_one_support(game_state)
+            or self.can_build_one_support(game_state)
+        )
+
+    def run_one_random_action(self, game_state):
+        weighted_actions = []
+        if self.can_build_one_turret(game_state) and c1 > 0:
+            weighted_actions.append((c1, self.build_one_turret))
+        if self.can_upgrade_one_support(game_state) and c2 > 0:
+            weighted_actions.append((c2, self.upgrade_one_support))
+
+        support_weight = 1 - c1 - c2
+        if self.can_build_one_support(game_state) and support_weight > 0:
+            weighted_actions.append((support_weight, self.build_one_support))
+
+        if not weighted_actions:
+            return False
+
+        total_weight = sum(weight for weight, _ in weighted_actions)
+        roll = random.random() * total_weight
+        cumulative = 0.0
+        for weight, action in weighted_actions:
+            cumulative += weight
+            if roll <= cumulative:
+                return action(game_state)
+        return weighted_actions[-1][1](game_state)
 
     def first_three_support_rows_complete(self, game_state):
         for location in SUPPORT_LOCATIONS:
@@ -80,34 +104,82 @@ class AlgoStrategy(gamelib.AlgoCore):
         return True
 
     def build_supports(self, game_state, only_first_three_rows=False):
+        while self.build_one_support(game_state, only_first_three_rows):
+            pass
+
+    def build_turrets(self, game_state):
+        while self.build_one_turret(game_state):
+            pass
+
+    def upgrade_supports(self, game_state):
+        while self.upgrade_one_support(game_state):
+            pass
+
+    def can_build_one_support(self, game_state, only_first_three_rows=False):
         support_cost = game_state.type_cost(SUPPORT)[SP]
+        if game_state.get_resource(SP) < support_cost:
+            return False
         for location in SUPPORT_LOCATIONS:
             if only_first_three_rows and location[1] > 4:
                 break
-            if game_state.get_resource(SP) < support_cost:
+            if game_state.contains_stationary_unit(location):
+                continue
+            return True
+        return False
+
+    def build_one_support(self, game_state, only_first_three_rows=False):
+        support_cost = game_state.type_cost(SUPPORT)[SP]
+        if game_state.get_resource(SP) < support_cost:
+            return False
+        for location in SUPPORT_LOCATIONS:
+            if only_first_three_rows and location[1] > 4:
                 break
             if game_state.contains_stationary_unit(location):
                 continue
-            game_state.attempt_spawn(SUPPORT, location)
+            return game_state.attempt_spawn(SUPPORT, location) > 0
+        return False
 
-    def build_turrets(self, game_state):
+    def can_build_one_turret(self, game_state):
         turret_cost = game_state.type_cost(TURRET)[SP]
+        if game_state.get_resource(SP) < turret_cost:
+            return False
         for location in TURRET_LOCATIONS:
-            if game_state.get_resource(SP) < turret_cost:
-                break
             if game_state.contains_stationary_unit(location):
                 continue
-            game_state.attempt_spawn(TURRET, location)
+            return True
+        return False
 
-    def upgrade_supports(self, game_state):
+    def build_one_turret(self, game_state):
+        turret_cost = game_state.type_cost(TURRET)[SP]
+        if game_state.get_resource(SP) < turret_cost:
+            return False
+        for location in TURRET_LOCATIONS:
+            if game_state.contains_stationary_unit(location):
+                continue
+            return game_state.attempt_spawn(TURRET, location) > 0
+        return False
+
+    def can_upgrade_one_support(self, game_state):
+        upgrade_cost = game_state.type_cost(SUPPORT, True)[SP]
+        if game_state.get_resource(SP) < upgrade_cost:
+            return False
         for location in SUPPORT_LOCATIONS:
             structure = game_state.contains_stationary_unit(location)
             if not structure or structure.unit_type != SUPPORT or structure.upgraded:
                 continue
-            upgrade_cost = game_state.type_cost(SUPPORT, True)[SP]
-            if game_state.get_resource(SP) < upgrade_cost:
-                break
-            game_state.attempt_upgrade(location)
+            return True
+        return False
+
+    def upgrade_one_support(self, game_state):
+        upgrade_cost = game_state.type_cost(SUPPORT, True)[SP]
+        if game_state.get_resource(SP) < upgrade_cost:
+            return False
+        for location in SUPPORT_LOCATIONS:
+            structure = game_state.contains_stationary_unit(location)
+            if not structure or structure.unit_type != SUPPORT or structure.upgraded:
+                continue
+            return game_state.attempt_upgrade(location) > 0
+        return False
 
     def send_even_scouts(self, game_state):
         scout_count = game_state.number_affordable(SCOUT)
