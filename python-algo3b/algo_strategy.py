@@ -3,10 +3,18 @@ import random
 from sys import maxsize
 
 
-SCOUT_SPAWNS = [[13, 0], [14, 0], [9, 4], [18, 4]]
+SCOUT_SPAWNS = [[13, 0], [14, 0]]
+TURRET_LOCATIONS = [
+    [9, 9], [9, 8], [18, 9], [18, 8],
+    [8, 9], [8, 8], [19, 9], [19, 8],
+]
+
+# 可直接在这里调概率，要求 c1 + c2 <= 1。
+c1 = 0.30
+c2 = 0.30
 
 # 手动列出位于 x + y >= 15 且 x - y <= 12 的己方半场 support 点，
-# 并按 y 从小到大优先建造；实际部署时跳过 x + y == 22 和 x - y == 5。
+# 并按 y 从小到大优先建造。
 SUPPORT_LOCATIONS = [
     [13, 2], [14, 2],
     [12, 3], [13, 3], [14, 3], [15, 3],
@@ -33,8 +41,9 @@ class AlgoStrategy(gamelib.AlgoCore):
     def on_game_start(self, config):
         gamelib.debug_write("Configuring python-algo3...")
         self.config = config
-        global SUPPORT, SCOUT, MP, SP
+        global SUPPORT, TURRET, SCOUT, MP, SP
         SUPPORT = config["unitInformation"][1]["shorthand"]
+        TURRET = config["unitInformation"][2]["shorthand"]
         SCOUT = config["unitInformation"][3]["shorthand"]
         MP = 1
         SP = 0
@@ -43,37 +52,77 @@ class AlgoStrategy(gamelib.AlgoCore):
         game_state = gamelib.GameState(self.config, turn_state)
         game_state.suppress_warnings(True)
 
-        self.build_supports(game_state)
+        self.run_build_plan(game_state)
         self.send_even_scouts(game_state)
 
         game_state.submit_turn()
 
-    def build_supports(self, game_state):
+    def run_build_plan(self, game_state):
+        if not self.first_three_support_rows_complete(game_state):
+            self.build_supports(game_state, only_first_three_rows=True)
+            return
+
+        roll = random.random()
+        if roll < c1:
+            self.build_turrets(game_state)
+        elif roll < c1 + c2:
+            self.upgrade_supports(game_state)
+        else:
+            self.build_supports(game_state)
+
+    def first_three_support_rows_complete(self, game_state):
+        for location in SUPPORT_LOCATIONS:
+            if location[1] > 4:
+                break
+            structure = game_state.contains_stationary_unit(location)
+            if not structure or structure.unit_type != SUPPORT:
+                return False
+        return True
+
+    def build_supports(self, game_state, only_first_three_rows=False):
         support_cost = game_state.type_cost(SUPPORT)[SP]
         for location in SUPPORT_LOCATIONS:
+            if only_first_three_rows and location[1] > 4:
+                break
             if game_state.get_resource(SP) < support_cost:
                 break
-            if location[0] + location[1] == 22 or location[0] - location[1] == 5 or location[0] + location[1] == 23 or location[0] - location[1] == 4: 
-                continue
             if game_state.contains_stationary_unit(location):
                 continue
             game_state.attempt_spawn(SUPPORT, location)
+
+    def build_turrets(self, game_state):
+        turret_cost = game_state.type_cost(TURRET)[SP]
+        for location in TURRET_LOCATIONS:
+            if game_state.get_resource(SP) < turret_cost:
+                break
+            if game_state.contains_stationary_unit(location):
+                continue
+            game_state.attempt_spawn(TURRET, location)
+
+    def upgrade_supports(self, game_state):
+        for location in SUPPORT_LOCATIONS:
+            structure = game_state.contains_stationary_unit(location)
+            if not structure or structure.unit_type != SUPPORT or structure.upgraded:
+                continue
+            upgrade_cost = game_state.type_cost(SUPPORT, True)[SP]
+            if game_state.get_resource(SP) < upgrade_cost:
+                break
+            game_state.attempt_upgrade(location)
 
     def send_even_scouts(self, game_state):
         scout_count = game_state.number_affordable(SCOUT)
         if scout_count <= 0:
             return
 
-        per_spawn = scout_count // len(SCOUT_SPAWNS)
-        remainder = scout_count % len(SCOUT_SPAWNS)
-        spawn_counts = [per_spawn] * len(SCOUT_SPAWNS)
+        left_count = scout_count // 2
+        if scout_count % 2 == 1 and game_state.turn_number % 2 == 0:
+            left_count += 1
+        right_count = scout_count - left_count
 
-        for index in range(remainder):
-            spawn_counts[index] += 1
-
-        for location, count in zip(SCOUT_SPAWNS, spawn_counts):
-            if count > 0:
-                game_state.attempt_spawn(SCOUT, location, count)
+        if left_count > 0:
+            game_state.attempt_spawn(SCOUT, SCOUT_SPAWNS[0], left_count)
+        if right_count > 0:
+            game_state.attempt_spawn(SCOUT, SCOUT_SPAWNS[1], right_count)
 
 
 if __name__ == "__main__":
