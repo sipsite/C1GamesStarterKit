@@ -23,14 +23,6 @@ PRIORITY_3_SUPPORTS = [
     [13, 10], [14, 10],
 ]
 
-SCOUT_SPAWN_LOCATIONS = [
-    [1, 12], [3, 10], [5, 8], [7, 6], [9, 4], [11, 2],
-    [26, 12], [24, 10], [22, 8], [20, 6], [18, 4], [16, 2],
-]
-
-SCOUT_SPAWN_WEIGHTS = [4, 2, 2, 1, 1, 1, 4, 2, 2, 1, 1, 1]
-
-
 class AlgoStrategy(gamelib.AlgoCore):
     def __init__(self):
         super().__init__()
@@ -69,12 +61,42 @@ class AlgoStrategy(gamelib.AlgoCore):
         if game_state.get_resource(MP) < game_state.type_cost(SCOUT)[MP]:
             return
 
-        spawn_location = random.choices(
-            SCOUT_SPAWN_LOCATIONS,
-            weights=SCOUT_SPAWN_WEIGHTS,
-            k=1,
-        )[0]
+        spawn_location = self.get_best_scout_spawn_location(game_state)
+        if spawn_location is None:
+            return
         game_state.attempt_spawn(SCOUT, spawn_location, 1000)
+
+    def get_best_scout_spawn_location(self, game_state):
+        turret_damage = gamelib.GameUnit(TURRET, game_state.config).damage_i
+        best_location = None
+        best_damage = None
+
+        for location in self.get_friendly_edge_locations(game_state):
+            if not game_state.can_spawn(SCOUT, location):
+                continue
+
+            target_edge = game_state.get_target_edge(location)
+            target_edge_locations = game_state.game_map.get_edge_locations(target_edge)
+            path = game_state.find_path_to_edge(location, target_edge)
+            if not path or path[-1] not in target_edge_locations:
+                continue
+
+            total_damage = 0
+            for path_location in path:
+                attackers = game_state.get_attackers(path_location, 0)
+                total_damage += len(attackers) * turret_damage
+
+            if best_damage is None or total_damage < best_damage:
+                best_location = location
+                best_damage = total_damage
+
+        return best_location
+
+    def get_friendly_edge_locations(self, game_state):
+        return (
+            game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_LEFT)
+            + game_state.game_map.get_edge_locations(game_state.game_map.BOTTOM_RIGHT)
+        )
 
 
 if __name__ == "__main__":

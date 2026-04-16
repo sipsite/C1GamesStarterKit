@@ -4,7 +4,7 @@ import gamelib
 
 
 SUPPORT_LOCATIONS = [
-    [13, 13] ## , [14, 13], [14, 12], [13, 12],
+    [13, 13], [14, 13], [14, 12], [13, 12],
 ]
 
 WALL_CHECK_Y = 14
@@ -16,6 +16,7 @@ class AlgoStrategy(gamelib.AlgoCore):
         self.counterattack_x = None
         self.counterattack_ready_turn = None
         self.counterattack_ready_x = None
+        self.counterattack_prep_turn = None
 
     def on_game_start(self, config):
         self.config = config
@@ -32,17 +33,32 @@ class AlgoStrategy(gamelib.AlgoCore):
     def on_turn(self, turn_state):
         game_state = gamelib.GameState(self.config, turn_state)
         game_state.suppress_warnings(True)
+        self.counterattack_prep_turn = None
 
-        self.build_supports(game_state)
         self.build_blocking_walls(game_state)
-        self.build_rearguard_turrets(game_state)
-        self.send_scouts(game_state)
+        best_scout_location = self.get_best_scout_spawn_location(game_state)
+        self.manage_supports(game_state, best_scout_location)
+        self.build_rearguard_walls(game_state)
+        self.send_scouts(game_state, best_scout_location)
 
         game_state.submit_turn()
 
-    def build_supports(self, game_state):
-        game_state.attempt_spawn(SUPPORT, SUPPORT_LOCATIONS)
-        game_state.attempt_upgrade(SUPPORT_LOCATIONS)
+    def manage_supports(self, game_state, best_scout_location):
+        if self.counterattack_prep_turn == game_state.turn_number:
+            return
+
+        if self.is_counterattack_turn(game_state):
+            self.build_counterattack_supports(game_state)
+            return
+
+        if (
+            best_scout_location is None
+            or game_state.get_resource(MP) < game_state.type_cost(SCOUT)[MP]
+        ):
+            self.delete_all_supports(game_state)
+            return
+
+        self.keep_two_supports(game_state)
 
     def build_blocking_walls(self, game_state):
         if game_state.turn_number == 0:
@@ -65,6 +81,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         if self.counterattack_ready_x != self.counterattack_x:
             self.counterattack_ready_turn = None
             self.counterattack_ready_x = None
+        if self.prepare_counterattack(game_state):
+            return
 
         desired_walls = self.get_desired_wall_locations(base_r_locations, self.counterattack_x, game_state)
         walls_to_remove = []
@@ -91,8 +109,6 @@ class AlgoStrategy(gamelib.AlgoCore):
             for wall_location in walls_to_spawn:
                 game_state.attempt_spawn(WALL, wall_location)
 
-        self.prepare_counterattack(game_state)
-
         for wall_location in self.get_counterattack_upgrade_locations(self.counterattack_x):
             if (
                 self.counterattack_ready_x == self.counterattack_x
@@ -108,24 +124,73 @@ class AlgoStrategy(gamelib.AlgoCore):
             ):
                 game_state.attempt_upgrade(wall_location)
 
-    def send_scouts(self, game_state):
+    def send_scouts(self, game_state, best_location):
         if game_state.get_resource(MP) < game_state.type_cost(SCOUT)[MP]:
             return
 
-        if self.counterattack_ready_turn == game_state.turn_number and self.counterattack_ready_x is not None:
-            best_location = self.get_best_scout_spawn_location(game_state)
+        if self.is_counterattack_turn(game_state):
             if best_location is not None:
                 game_state.attempt_spawn(SCOUT, best_location, 1000)
             self.counterattack_ready_turn = None
             self.counterattack_ready_x = None
             return
 
-        best_location = self.get_best_scout_spawn_location(game_state)
         if best_location is None:
             return
         game_state.attempt_spawn(SCOUT, best_location, 1000)
 
-    def build_rearguard_turrets(self, game_state):
+    def build_counterattack_supports(self, game_state):
+        built_or_upgraded = 0
+        for location in SUPPORT_LOCATIONS:
+            if built_or_upgraded >= 3:
+                return
+
+            structure = game_state.contains_stationary_unit(location)
+            if not structure:
+                if game_state.attempt_spawn(SUPPORT, location) > 0:
+                    if game_state.attempt_upgrade(location) > 0:
+                        built_or_upgraded += 1
+                continue
+
+            if structure.player_index != 0 or structure.unit_type != SUPPORT or structure.upgraded:
+                continue
+
+            if game_state.attempt_upgrade(location) > 0:
+                built_or_upgraded += 1
+
+    def keep_two_supports(self, game_state):
+        keep_locations = SUPPORT_LOCATIONS[:2]
+        for location in keep_locations:
+            structure = game_state.contains_stationary_unit(location)
+            if not structure:
+                if game_state.attempt_spawn(SUPPORT, location) > 0:
+                    game_state.attempt_upgrade(location)
+                continue
+
+            if structure.player_index == 0 and structure.unit_type == SUPPORT and not structure.upgraded:
+                game_state.attempt_upgrade(location)
+
+        for location in SUPPORT_LOCATIONS[2:]:
+            structure = game_state.contains_stationary_unit(location)
+            if structure and structure.player_index == 0 and structure.unit_type == SUPPORT:
+                game_state.attempt_remove(location)
+
+    def delete_all_supports(self, game_state):
+        for location in SUPPORT_LOCATIONS:
+            structure = game_state.contains_stationary_unit(location)
+            if structure and structure.player_index == 0 and structure.unit_type == SUPPORT:
+                game_state.attempt_remove(location)
+
+    def is_counterattack_turn(self, game_state):
+        return (
+            self.counterattack_ready_turn == game_state.turn_number
+            and self.counterattack_ready_x is not None
+        )
+
+    def build_rearguard_walls(self, game_state):
+        if self.counterattack_prep_turn == game_state.turn_number:
+            return
+
         for x in range(game_state.ARENA_SIZE):
             front_location = [x, WALL_CHECK_Y - 1]
             back_location = [x, WALL_CHECK_Y - 2]
@@ -142,7 +207,18 @@ class AlgoStrategy(gamelib.AlgoCore):
             if structure.health >= structure.max_health / 3:
                 continue
 
-            game_state.attempt_spawn(TURRET, back_location)
+            if game_state.attempt_spawn(WALL, back_location) > 0:
+                game_state.attempt_upgrade(back_location)
+                continue
+
+            back_structure = game_state.contains_stationary_unit(back_location)
+            if (
+                back_structure
+                and back_structure.player_index == 0
+                and back_structure.unit_type == WALL
+                and not back_structure.upgraded
+            ):
+                game_state.attempt_upgrade(back_location)
 
     def get_best_scout_spawn_location(self, game_state):
         turret_damage = gamelib.GameUnit(TURRET, game_state.config).damage_i
@@ -246,20 +322,38 @@ class AlgoStrategy(gamelib.AlgoCore):
 
     def prepare_counterattack(self, game_state):
         if self.counterattack_x is None:
-            return
+            return False
         if self.counterattack_ready_turn is not None:
-            return
-        if game_state.get_resource(MP) <= game_state.enemy_health * 1.1:
-            return
+            return False
+        my_mp = game_state.get_resource(MP)
+        if my_mp <= game_state.enemy_health * 1.1: # and my_mp < 12:
+            return False
 
         wall_location = [self.counterattack_x, WALL_CHECK_Y - 2]
         wall = game_state.contains_stationary_unit(wall_location)
         if not wall or wall.player_index != 0 or wall.unit_type != WALL:
-            return
+            return False
 
         if game_state.attempt_remove(wall_location) > 0:
+            self.remove_all_non_support_structures(game_state)
+            self.counterattack_prep_turn = game_state.turn_number
             self.counterattack_ready_turn = game_state.turn_number + 1
             self.counterattack_ready_x = self.counterattack_x
+            return True
+        return False
+
+    def remove_all_non_support_structures(self, game_state):
+        remove_locations = []
+        for location in game_state.game_map:
+            structure = game_state.contains_stationary_unit(location)
+            if not structure or structure.player_index != 0:
+                continue
+            if structure.unit_type == SUPPORT:
+                continue
+            remove_locations.append(location)
+
+        if remove_locations:
+            game_state.attempt_remove(remove_locations)
 
     def should_block_enemy_front(self, game_state, enemy_location):
         structure = game_state.contains_stationary_unit(enemy_location)
