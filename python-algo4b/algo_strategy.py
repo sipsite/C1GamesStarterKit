@@ -163,7 +163,12 @@ class AlgoStrategy(gamelib.AlgoCore):
         for location in keep_locations:
             structure = game_state.contains_stationary_unit(location)
             if not structure:
-                game_state.attempt_spawn(SUPPORT, location)
+                if game_state.attempt_spawn(SUPPORT, location) > 0:
+                    game_state.attempt_upgrade(location)
+                continue
+
+            if structure.player_index == 0 and structure.unit_type == SUPPORT and not structure.upgraded:
+                game_state.attempt_upgrade(location)
 
         for location in SUPPORT_LOCATIONS[2:]:
             structure = game_state.contains_stationary_unit(location)
