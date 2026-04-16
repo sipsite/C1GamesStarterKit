@@ -21,7 +21,7 @@ Advanced strategy tips:
 """
 
 # constants
-c1 = 2 # start building at c1 round
+c1 = 1 # start building at c1 round
 c2 = 0.4 # proportion of support among "turrent and support"
 c3 = 1 # upgrade cost adds up to proportion c3
 cc1 = 0.4
@@ -160,8 +160,8 @@ class AlgoStrategy(gamelib.AlgoCore):
         )
 
         if game_state.turn_number <= 3:
-            game_state.attempt_spawn(INTERCEPTOR, [7, 6], 2)
-            game_state.attempt_spawn(INTERCEPTOR, [20, 6], 3)
+            game_state.attempt_spawn(INTERCEPTOR, [7, 6], 1)
+            game_state.attempt_spawn(INTERCEPTOR, [20, 6], 1)
             return
 
         enemy_mp = game_state.get_resource(MP, 1)

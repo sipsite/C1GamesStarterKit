@@ -21,7 +21,7 @@ Advanced strategy tips:
 """
 
 # constants
-c1 = 1 # start building at c1 round
+c1 = 0 # start building at c1 round
 c2 = 0.8 # proportion of support among "turrent and support"
 c3 = 1 # upgrade cost adds up to proportion c3
 cc1 = 0.4
@@ -161,37 +161,38 @@ class AlgoStrategy(gamelib.AlgoCore):
             )
         )
 
-        if game_state.turn_number <= 3:
-            return
+        # if game_state.turn_number <= 3:
+        #     return
 
         my_mp = game_state.get_resource(MP)
         enemy_health = game_state.enemy_health
 
-        attack_probability = self.w1(my_mp - best_attack * cc1, 13)
-        if random.random() >= attack_probability:
-            return
+        # attack_probability = self.w1(my_mp - best_attack * cc1, 13)
+        # if random.random() >= attack_probability:
+        #     return
 
-        if enemy_health * 1.1 < my_mp and best_attack < cc2:
-            scout_probability = self.w1(my_mp - cc1 * best_attack, enemy_health)
-            if random.random() < scout_probability:
-                self.send_all_of_type(game_state, SCOUT, best_location)
-                return
+        # if enemy_health * 1.1 < my_mp and best_attack < cc2:
+        #     scout_probability = self.w1(my_mp - cc1 * best_attack, enemy_health)
+        #     if random.random() < scout_probability:
+        #         self.send_all_of_type(game_state, SCOUT, best_location)
+        #         return
+        
+        # if my_mp <= 15:
+        #     return
 
-        if my_mp <= 15:
-            return
+        # fallback_attack_probability = self.w1(
+        #     my_mp - best_attack * cc1,
+        #     10 + math.sqrt(max(game_state.turn_number, 1)),
+        # )
+        # if random.random() >= fallback_attack_probability:
+        #     return
 
-        fallback_attack_probability = self.w1(
-            my_mp - best_attack * cc1,
-            10 + math.sqrt(max(game_state.turn_number, 1)),
-        )
-        if random.random() >= fallback_attack_probability:
-            return
-
-        demolisher_probability = self.w1(best_attack * cc3, 1)
-        if random.random() < demolisher_probability:
-            self.send_all_of_type(game_state, DEMOLISHER, best_location)
-        else:
-            self.send_all_of_type(game_state, SCOUT, best_location)
+        # demolisher_probability = self.w1(best_attack * cc3, 1)
+        # if random.random() < demolisher_probability:
+        #     self.send_all_of_type(game_state, DEMOLISHER, best_location)
+        # else:
+        #     self.send_all_of_type(game_state, SCOUT, best_location)
+        self.send_all_of_type(game_state, SCOUT, best_location)
 
     def spawn_in_order(self, game_state, unit_type, locations):
         for location in locations:
